@@ -143,20 +143,25 @@ type Conf struct {
 	HLSDirectory       string         `json:"hlsDirectory"`
 
 	// WebRTC
-	WebRTC                  bool              `json:"webrtc"`
-	WebRTCDisable           *bool             `json:"webrtcDisable,omitempty"` // deprecated
-	WebRTCAddress           string            `json:"webrtcAddress"`
-	WebRTCEncryption        bool              `json:"webrtcEncryption"`
-	WebRTCServerKey         string            `json:"webrtcServerKey"`
-	WebRTCServerCert        string            `json:"webrtcServerCert"`
-	WebRTCAllowOrigin       string            `json:"webrtcAllowOrigin"`
-	WebRTCTrustedProxies    IPsOrCIDRs        `json:"webrtcTrustedProxies"`
-	WebRTCICEServers        *[]string         `json:"webrtcICEServers,omitempty"` // deprecated
-	WebRTCICEServers2       []WebRTCICEServer `json:"webrtcICEServers2"`
-	WebRTCICEInterfaces     []string          `json:"webrtcICEInterfaces"`
-	WebRTCICEHostNAT1To1IPs []string          `json:"webrtcICEHostNAT1To1IPs"`
-	WebRTCICEUDPMuxAddress  string            `json:"webrtcICEUDPMuxAddress"`
-	WebRTCICETCPMuxAddress  string            `json:"webrtcICETCPMuxAddress"`
+	WebRTC                      bool              `json:"webrtc"`
+	WebRTCDisable               *bool             `json:"webrtcDisable,omitempty"` // deprecated
+	WebRTCAddress               string            `json:"webrtcAddress"`
+	WebRTCEncryption            bool              `json:"webrtcEncryption"`
+	WebRTCServerKey             string            `json:"webrtcServerKey"`
+	WebRTCServerCert            string            `json:"webrtcServerCert"`
+	WebRTCAllowOrigin           string            `json:"webrtcAllowOrigin"`
+	WebRTCTrustedProxies        IPsOrCIDRs        `json:"webrtcTrustedProxies"`
+	WebRTCIPsFromInterfaces     bool              `json:"webrtcIPsFromInterfaces"`
+	WebRTCIPsFromInterfacesList []string          `json:"webrtcIPsFromInterfacesList"`
+	WebRTCAdditionalHosts       []string          `json:"webrtcAdditionalHosts"`
+	WebRTCMode                  WebRTCMode        `json:"webrtcMode"`
+	WebRTCPassiveUDPAddress     string            `json:"webrtcPassiveUDPAddress"`
+	WebRTCPassiveTCPAddress     string            `json:"webrtcPassiveTCPAddress"`
+	WebRTCICEServers2           []WebRTCICEServer `json:"webrtcICEServers2"`
+	WebRTCICEHostNAT1To1IPs     *[]string         `json:"webrtcICEHostNAT1To1IPs,omitempty"` // deprecated
+	WebRTCICEUDPMuxAddress      *string           `json:"webrtcICEUDPMuxAddress,omitempty"`  // deprecated
+	WebRTCICETCPMuxAddress      *string           `json:"webrtcICETCPMuxAddress,omitempty"`  // deprecated
+	WebRTCICEServers            *[]string         `json:"webrtcICEServers,omitempty"`        // deprecated
 
 	// SRT
 	SRT        bool   `json:"srt"`
@@ -234,9 +239,10 @@ func (conf *Conf) setDefaults() {
 	conf.WebRTCServerKey = "server.key"
 	conf.WebRTCServerCert = "server.crt"
 	conf.WebRTCAllowOrigin = "*"
-	conf.WebRTCICEServers2 = []WebRTCICEServer{{URL: "stun:stun.l.google.com:19302"}}
-	conf.WebRTCICEInterfaces = []string{}
-	conf.WebRTCICEHostNAT1To1IPs = []string{}
+	conf.WebRTCIPsFromInterfaces = true
+	conf.WebRTCAdditionalHosts = []string{}
+	conf.WebRTCPassiveUDPAddress = ":8160"
+	conf.WebRTCICEServers2 = []WebRTCICEServer{}
 
 	// SRT
 	conf.SRT = true
@@ -382,6 +388,15 @@ func (conf *Conf) Check() error {
 	if conf.WebRTCDisable != nil {
 		conf.WebRTC = !*conf.WebRTCDisable
 	}
+	if conf.WebRTCICEHostNAT1To1IPs != nil {
+		conf.WebRTCAdditionalHosts = *conf.WebRTCICEHostNAT1To1IPs
+	}
+	if conf.WebRTCICEUDPMuxAddress != nil {
+		conf.WebRTCPassiveUDPAddress = *conf.WebRTCICEUDPMuxAddress
+	}
+	if conf.WebRTCICETCPMuxAddress != nil {
+		conf.WebRTCPassiveTCPAddress = *conf.WebRTCICETCPMuxAddress
+	}
 	if conf.WebRTCICEServers != nil {
 		for _, server := range *conf.WebRTCICEServers {
 			parts := strings.Split(server, ":")
@@ -403,6 +418,18 @@ func (conf *Conf) Check() error {
 			!strings.HasPrefix(server.URL, "turn:") &&
 			!strings.HasPrefix(server.URL, "turns:") {
 			return fmt.Errorf("invalid ICE server: '%s'", server.URL)
+		}
+	}
+	if conf.WebRTCMode == WebRTCModePassive {
+		if conf.WebRTCPassiveUDPAddress == "" && conf.WebRTCPassiveTCPAddress == "" {
+			return fmt.Errorf("when using WebRTC passive mode, at least one between 'webrtcPassiveUDPAddress' and 'webrtcPassiveTCPAddress' must be filled")
+		}
+		if !conf.WebRTCIPsFromInterfaces && len(conf.WebRTCAdditionalHosts) == 0 {
+			return fmt.Errorf("when using WebRTC ICE mode, at least one between 'webrtcIPsFromInterfaces' or 'webrtcAdditionalHosts' must be filled")
+		}
+	} else {
+		if !conf.WebRTCIPsFromInterfaces && len(conf.WebRTCAdditionalHosts) == 0 && len(conf.WebRTCICEServers2) == 0 {
+			return fmt.Errorf("when using WebRTC ICE mode, at least one between 'webrtcIPsFromInterfaces', 'webrtcAdditionalHosts' or 'webrtcICEServers2' must be filled")
 		}
 	}
 

@@ -4,6 +4,8 @@ import (
 	"github.com/pion/ice/v2"
 	"github.com/pion/interceptor"
 	"github.com/pion/webrtc/v3"
+
+	"github.com/bluenviron/mediamtx/internal/conf"
 )
 
 func stringInSlice(a string, list []string) bool {
@@ -99,32 +101,31 @@ var audioCodecs = []webrtc.RTPCodecParameters{
 
 // APIConf is the configuration passed to NewAPI().
 type APIConf struct {
-	ICEInterfaces     []string
-	ICEHostNAT1To1IPs []string
-	ICEUDPMux         ice.UDPMux
-	ICETCPMux         ice.TCPMux
+	Mode                  conf.WebRTCMode
+	IPsFromInterfaces     bool
+	IPsFromInterfacesList []string
+	AdditionalHosts []string
+	ICEUDPMux             ice.UDPMux
+	ICETCPMux             ice.TCPMux
 }
 
 // NewAPI allocates a webrtc API.
-func NewAPI(conf APIConf) (*webrtc.API, error) {
+func NewAPI(cnf APIConf) (*webrtc.API, error) {
 	settingsEngine := webrtc.SettingEngine{}
 
-	if len(conf.ICEInterfaces) != 0 {
-		settingsEngine.SetInterfaceFilter(func(iface string) bool {
-			return stringInSlice(iface, conf.ICEInterfaces)
-		})
+	settingsEngine.SetInterfaceFilter(func(iface string) bool {
+		return cnf.IPsFromInterfaces && (len(cnf.IPsFromInterfacesList) == 0 ||
+			stringInSlice(iface, cnf.IPsFromInterfacesList))
+	})
+
+	settingsEngine.SetAdditionalHosts(cnf.AdditionalHosts)
+
+	if cnf.ICEUDPMux != nil {
+		settingsEngine.SetICEUDPMux(cnf.ICEUDPMux)
 	}
 
-	if len(conf.ICEHostNAT1To1IPs) != 0 {
-		settingsEngine.SetNAT1To1IPs(conf.ICEHostNAT1To1IPs, webrtc.ICECandidateTypeHost)
-	}
-
-	if conf.ICEUDPMux != nil {
-		settingsEngine.SetICEUDPMux(conf.ICEUDPMux)
-	}
-
-	if conf.ICETCPMux != nil {
-		settingsEngine.SetICETCPMux(conf.ICETCPMux)
+	if cnf.ICETCPMux != nil {
+		settingsEngine.SetICETCPMux(cnf.ICETCPMux)
 		settingsEngine.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeTCP4})
 	}
 
